@@ -7095,9 +7095,6 @@ impl Serialize for NetworkAccessPolicy {
 #[doc = "Describes a network interface reference."]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct NetworkInterfaceReference {
-    #[doc = "Resource Id."]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
     #[serde(flatten)]
     pub sub_resource: SubResource,
     #[doc = "Describes a network interface reference properties."]
