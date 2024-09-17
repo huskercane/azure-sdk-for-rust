@@ -24,8 +24,14 @@ impl From<&str> for LroStatus {
     fn from(s: &str) -> Self {
         match s {
             "InProgress" => LroStatus::InProgress,
-            "Succeeded" => LroStatus::Succeeded,
-            "Failed" => LroStatus::Failed,
+            "ComponentStatus/StdOut/succeeded" => LroStatus::Succeeded,
+            "ComponentStatus/StdErr/succeeded" => LroStatus::Succeeded,
+            "ComponentStatus/StdOut/failed" => LroStatus::Failed,
+            "ComponentStatus/StdErr/failed" => LroStatus::Failed,
+            "ComponentStatus/StdOut/cancelled" => LroStatus::Canceled,
+            "ComponentStatus/StdErr/cancelled" => LroStatus::Canceled,
+            "ComponentStatus/StdOut/canceled" => LroStatus::Canceled,
+            "ComponentStatus/StdErr/canceled" => LroStatus::Canceled,
             // While the specification indicates we should use `Canceled`, in
             // practice numerous services use `Cancelled`.  As such, we support
             // both.
@@ -66,11 +72,31 @@ pub mod location {
 
     pub fn get_provisioning_state(body: &[u8]) -> Option<LroStatus> {
         #[derive(serde::Deserialize)]
-        struct Body {
-            status: String,
+        struct Value {
+            pub code: String,
+            pub level: String,
+            #[serde(rename = "displayStatus")]
+            pub display_status: String,
+            pub message: String,
         }
-        let body: Body = from_json(body).ok()?;
-        Some(LroStatus::from(body.status.as_str()))
+
+        #[derive(serde::Deserialize)]
+        struct Body {
+            pub value: Vec<Value>,
+        }
+        // struct Body {
+        //     status: String,
+        // }
+        let body: Body = match from_json(body) {
+            Ok(body) => body,
+            Err(e) => {
+                println!("Failed to deserialize body: body: {:?}", String::from_utf8_lossy(body));
+                println!("Failed to deserialize body: {:?}", e);
+                return None;
+            }
+        };
+        // let body: Body = result.ok();
+        Some(LroStatus::from(body.value[0].code.as_str()))
     }
 }
 

@@ -4807,9 +4807,16 @@ pub mod virtual_machines {
                     };
                     use std::time::Duration;
                     let this = self.clone();
-                    let response = this.send().await?;
-                    let headers = response.as_raw_response().headers();
-                    let location = get_location(headers, FinalState::Location)?;
+                    // let response = this.send().await;
+                    let response1 = match this.send().await {
+                        Ok(resp) => resp,
+                        Err(e) => {
+                            log::error!("Error sending request: {:?}", e);
+                            return Err(e)
+                        },
+                    };
+                    let headers1 = response1.as_raw_response().headers();
+                    let location = get_location(headers1, FinalState::Location)?;
                     if let Some(url) = location {
                         loop {
                             let mut req = azure_core::Request::new(url.clone(), azure_core::Method::Get);
@@ -4819,20 +4826,32 @@ pub mod virtual_machines {
                             let headers = response.headers();
                             let retry_after = get_retry_after(headers);
                             let bytes = response.into_body().collect().await?;
-                            let provisioning_state = get_provisioning_state(&bytes).ok_or_else(|| {
-                                Error::message(
-                                    ErrorKind::Other,
-                                    "Long running operation failed (missing provisioning state)".to_string(),
-                                )
-                            })?;
+                            let provisioning_state = if bytes.is_empty() {
+                                LroStatus::Other(String::from("no response"))
+                            } else {
+                                get_provisioning_state(&bytes).ok_or_else(|| {
+                                    Error::message(
+                                        ErrorKind::Other,
+                                        "Long running operation failed (missing provisioning state)".to_string(),
+                                    )
+                                })?
+                            };
                             log::trace!("current provisioning_state: {provisioning_state:?}");
                             match provisioning_state {
                                 LroStatus::Succeeded => {
-                                    let mut req = azure_core::Request::new(self.url()?, azure_core::Method::Get);
+                                    let mut req = azure_core::Request::new(url.clone(), azure_core::Method::Get);
                                     let bearer_token = self.client.bearer_token().await?;
                                     req.insert_header(azure_core::headers::AUTHORIZATION, format!("Bearer {}", bearer_token.secret()));
-                                    let response = self.client.send(&mut req).await?;
-                                    return Response(response).into_body().await;
+                                    // let response = self.client.send(&mut req).await?;
+                                    let response2 = match self.client.send(&mut req).await {
+                                        Ok(resp) => resp,
+                                        Err(e) => {
+                                            log::error!("Error sending request 222: {:?}", e);
+                                            return Err(e)
+                                        },
+                                    };
+
+                                    return Response(response2).into_body().await;
                                 }
                                 LroStatus::Failed => {
                                     return Err(Error::message(ErrorKind::Other, "Long running operation failed".to_string()))
@@ -4846,7 +4865,7 @@ pub mod virtual_machines {
                             }
                         }
                     } else {
-                        response.into_body().await
+                        response1.into_body().await
                     }
                 })
             }
